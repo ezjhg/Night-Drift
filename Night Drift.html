@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Night Drift</title>
+  <style>
+    body {
+      margin: 0;
+      background: #05070a;
+      text-align: center;
+    }
+    canvas {
+      background: radial-gradient(circle at center, #1a1f2b 0%, #0b0e14 70%);
+      display: block;
+      margin: auto;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #1a1f2b;
+      color: #00ffff;
+      border: 2px solid #00ffff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0b0e14;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="canvas" width="1200" height="800"></canvas>
+<button id="toggleBtn">Start Car</button>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let angle = 0;
+const radius = 180;
+const centerX = canvas.width / 2;
+const centerY = canvas.height / 2;
+const driftOffset = Math.PI / 6;
+
+const smokeParticles = [];
+const skidMarks = [];
+const MAX_SMOKE = 250;
+
+let running = false;
+let animationId = null;
+
+// CAR 
+function drawCar(x, y, rotation) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+
+  // Body
+  ctx.fillStyle = "#0d1b2a";
+  ctx.fillRect(-40, -12, 80, 24);
+
+  // Roof / windshield
+  ctx.fillStyle = "#1f2937";
+  ctx.fillRect(-20, -10, 40, 10);
+
+  // Side windows
+  ctx.fillStyle = "#3a506b";
+  ctx.fillRect(-18, -9, 36, 8);
+
+  // Wheels
+  ctx.fillStyle = "#111";
+  ctx.beginPath();
+  ctx.arc(-28, -14, 7, 0, Math.PI * 2);
+  ctx.arc(28, -14, 7, 0, Math.PI * 2);
+  ctx.arc(-28, 14, 7, 0, Math.PI * 2);
+  ctx.arc(28, 14, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Headlights
+  ctx.fillStyle = "#00ffff";
+  ctx.shadowColor = "#00ffff";
+  ctx.shadowBlur = 12;
+  ctx.fillRect(36, -6, 6, 5);
+  ctx.fillRect(36, 1, 6, 5);
+
+  // Taillights
+  ctx.fillStyle = "#ff3333";
+  ctx.shadowColor = "#ff3333";
+  ctx.shadowBlur = 10;
+  ctx.fillRect(-42, -6, 5, 5);
+  ctx.fillRect(-42, 1, 5, 5);
+
+  // Spoiler
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#1f2937";
+  ctx.fillRect(-44, -14, 4, 28);
+
+  ctx.restore();
+}
+
+// SMOKE 
+function spawnSmoke(x, y, rotation) {
+  if (smokeParticles.length > MAX_SMOKE) return;
+  const rearOffset = 36;
+
+  smokeParticles.push({
+    x: x - Math.cos(rotation) * rearOffset,
+    y: y - Math.sin(rotation) * rearOffset,
+    vx: (Math.random() - 0.5) * 0.8,
+    vy: (Math.random() - 0.5) * 0.8,
+    radius: 8 + Math.random() * 6,
+    life: 1
+  });
+}
+
+function updateSmoke() {
+  for (let i = smokeParticles.length - 1; i >= 0; i--) {
+    const p = smokeParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.radius += 0.3;
+    p.life -= 0.02;
+    if (p.life <= 0) smokeParticles.splice(i, 1);
+  }
+}
+
+function drawSmoke() {
+  for (const p of smokeParticles) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(180,180,200,${p.life * 0.4})`;
+    ctx.fill();
+  }
+}
+
+// SKID MARKS 
+function addSkidMarks(x, y, rotation) {
+  const rearOffset = 30;
+  const tireSpacing = 14;
+
+  const baseX = x - Math.cos(rotation) * rearOffset;
+  const baseY = y - Math.sin(rotation) * rearOffset;
+
+  const perpX = Math.cos(rotation + Math.PI / 2);
+  const perpY = Math.sin(rotation + Math.PI / 2);
+
+  skidMarks.push(
+    { x: baseX + perpX * tireSpacing, y: baseY + perpY * tireSpacing, life: 1 },
+    { x: baseX - perpX * tireSpacing, y: baseY - perpY * tireSpacing, life: 1 }
+  );
+}
+
+function updateSkidMarks() {
+  for (let i = skidMarks.length - 1; i >= 0; i--) {
+    skidMarks[i].life -= 0.0015;
+    if (skidMarks[i].life <= 0) skidMarks.splice(i, 1);
+  }
+}
+
+function drawSkidMarks() {
+  ctx.strokeStyle = "rgba(40,40,40,0.9)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+
+  for (let i = 1; i < skidMarks.length; i++) {
+    const prev = skidMarks[i - 1];
+    const curr = skidMarks[i];
+    if (Math.abs(prev.life - curr.life) < 0.01) {
+      ctx.moveTo(prev.x, prev.y);
+      ctx.lineTo(curr.x, curr.y);
+    }
+  }
+  ctx.stroke();
+}
+
+// ANIMATION 
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const x = centerX + Math.cos(angle) * radius;
+  const y = centerY + Math.sin(angle) * radius;
+  const rotation = angle + Math.PI / 2 + driftOffset;
+
+  spawnSmoke(x, y, rotation);
+  addSkidMarks(x, y, rotation);
+
+  updateSmoke();
+  updateSkidMarks();
+
+  drawSkidMarks();
+  drawSmoke();
+  drawCar(x, y, rotation);
+
+  angle += 0.02;
+  animationId = requestAnimationFrame(animate);
+}
+
+// CONTROL 
+const toggleBtn = document.getElementById("toggleBtn");
+toggleBtn.addEventListener("click", () => {
+  if (running) {
+    cancelAnimationFrame(animationId);
+    running = false;
+    toggleBtn.textContent = "Start Car";
+  } else {
+    running = true;
+    animate();
+    toggleBtn.textContent = "Stop Car";
+  }
+});
+</script>
+</body>
+</html>
